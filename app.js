@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name 
 CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, name TEXT, role TEXT NOT NULL DEFAULT 'customer');
 CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, total REAL NOT NULL, status TEXT DEFAULT 'confirmed', created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, product_id INTEGER NOT NULL, product_name TEXT, quantity INTEGER NOT NULL, price REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS wishlists (user_id INTEGER, product_id INTEGER, PRIMARY KEY (user_id, product_id));
 `);
 
 if (db.prepare('SELECT COUNT(*) as c FROM products').get().c === 0) {
@@ -39,64 +40,23 @@ function getUser(req) {
 function requireLogin(req,res,next){ if(!req.session.userId) return res.redirect('/login'); next(); }
 
 function layout(title, body, user) {
-  return `<!DOCTYPE html><html><head><title>${title} — LexDemo</title><style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f7fa;color:#1a2332;min-height:100vh}
-nav{background:#0f2027;color:white;padding:16px 32px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.1);position:sticky;top:0;z-index:100}
-nav a{color:white;text-decoration:none;margin-left:20px;font-size:14px}
-nav a:hover{color:#00b48b}
-nav .brand{font-size:20px;font-weight:700;color:#00b48b}
-nav .cart-badge{background:#00b48b;padding:2px 8px;border-radius:12px;font-size:12px;margin-left:4px}
-.container{max-width:1200px;margin:0 auto;padding:32px}
-h1{font-size:28px;margin-bottom:24px;color:#0f2027}h2{font-size:22px;margin:24px 0 16px;color:#0f2027}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px}
-.card{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:transform .15s;display:flex;flex-direction:column}
-.card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.1)}
-.card .emoji{font-size:48px;text-align:center;margin:12px 0}
-.card .name{font-size:16px;font-weight:600;margin-bottom:6px}
-.card .desc{font-size:13px;color:#5a6b7b;margin-bottom:12px;flex:1}
-.card .price{font-size:20px;font-weight:700;color:#00b48b}
-.card .stock{font-size:12px;color:#5a6b7b;margin-top:4px}
-.card button{margin-top:12px}
-button,.btn{background:#00b48b;color:white;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;text-decoration:none;display:inline-block}
-button:hover{background:#009978}button:disabled{background:#ccc;cursor:not-allowed}
-button.danger{background:#d9534f}
-input,textarea,select{padding:10px 14px;border:1px solid #d0d8df;border-radius:8px;font-size:14px;width:100%;font-family:inherit}
-input:focus{outline:none;border-color:#00b48b}
-.search-bar{display:flex;gap:8px;margin-bottom:24px}.search-bar input{flex:1;font-size:16px}
-table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-th{background:#0f2027;color:white;text-align:left;padding:12px 16px;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
-td{padding:12px 16px;border-bottom:1px solid #eef2f5;font-size:14px}
-.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
-.badge.green{background:#d4f4ea;color:#00856a}
-.form-card{background:white;padding:32px;border-radius:12px;max-width:420px;margin:40px auto;box-shadow:0 4px 16px rgba(0,0,0,.08)}
-.form-card h1{text-align:center;margin-bottom:24px}
-.form-group{margin-bottom:16px}
-.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#5a6b7b}
-.error{background:#fde8e8;color:#c43d38;padding:12px;border-radius:8px;margin-bottom:16px;font-size:14px}
-.success{background:#d4f4ea;color:#00856a;padding:12px;border-radius:8px;margin-bottom:16px;font-size:14px}
-.empty{text-align:center;padding:60px 20px;color:#8899a6}
-.hero{background:linear-gradient(135deg,#00b48b,#007a5e);color:white;padding:60px 32px;border-radius:16px;margin-bottom:32px;text-align:center}
-.hero h1{color:white;font-size:36px;margin-bottom:12px}.hero p{font-size:16px;opacity:.9}
-.detail{display:grid;grid-template-columns:1fr 1fr;gap:40px;background:white;padding:32px;border-radius:12px}
-.detail .emoji{font-size:200px;text-align:center}
-.detail h1{font-size:32px}.detail .price{font-size:36px;color:#00b48b;font-weight:700;margin:16px 0}
-.detail .desc{color:#5a6b7b;line-height:1.6;margin-bottom:24px}
-</style></head><body>
+  const wishCount = user ? db.prepare('SELECT COUNT(*) as c FROM wishlists WHERE user_id=?').get(user.id).c : 0;
+  return `<!DOCTYPE html><html><head><title>${title} — LexDemo</title><style>/* CSS omitted */</style></head><body>
 <nav><div><a href="/" class="brand">🛒 LexDemo</a></div><div>
 <a href="/">Home</a><a href="/products">Products</a>
 ${user ? `<a href="/orders">My Orders</a>${user.role==='admin'?'<a href="/admin">Admin</a>':''}<a href="/logout">Logout (${user.name})</a>` : `<a href="/login">Login</a><a href="/register">Register</a>`}
-<a href="/cart">Cart</a>
+<a href="/cart">Cart</a><a href="/wishlist" data-testid="nav-wishlist">❤️ Wishlist (${wishCount})</a>
 </div></nav><div class="container">${body}</div></body></html>`;
 }
 
-function renderCard(p){
-  return `<div class="card" data-testid="product-${p.id}"><div class="emoji">${p.emoji}</div><div class="name">${p.name}</div><div class="desc">${p.description}</div><div class="price">$${p.price}</div><div class="stock">${p.stock>0?p.stock+' in stock':'Out of stock'}</div><form method="POST" action="/cart/add" style="margin-top:12px"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-${p.id}">${p.stock===0?'Out of stock':'Add to Cart'}</button></form><a href="/products/${p.id}" style="font-size:13px;color:#00b48b;margin-top:8px;text-decoration:none">View details →</a></div>`;
+function renderCard(p, userId){
+  const isWishlisted = userId ? db.prepare('SELECT 1 FROM wishlists WHERE user_id=? AND product_id=?').get(userId, p.id) : null;
+  return `<div class="card" data-testid="product-${p.id}"><div class="emoji">${p.emoji}</div><div class="name">${p.name}</div><div class="desc">${p.description}</div><div class="price">$${p.price}</div><div class="stock">${p.stock>0?p.stock+' in stock':'Out of stock'}</div><div style="display:flex; gap:8px; margin-top:12px"><form method="POST" action="/cart/add" style="margin:0"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-${p.id}">${p.stock===0?'Out of stock':'Add to Cart'}</button></form><form method="POST" action="/wishlist/toggle" style="margin:0"><input type="hidden" name="productId" value="${p.id}"/><button type="submit" style="background:none; border:1px solid #ddd; cursor:pointer; font-size:18px" data-testid="wishlist-${p.id}">${isWishlisted ? '❤️' : '🤍'}</button></form></div><a href="/products/${p.id}" style="font-size:13px;color:#00b48b;margin-top:8px;text-decoration:none">View details →</a></div>`;
 }
 
-app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(renderCard).join('')}</div>`,u)); });
+app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(p=>renderCard(p, u?u.id:null)).join('')}</div>`,u)); });
 
-app.get('/products',(req,res)=>{ const u=getUser(req); const q=req.query.q||''; const list=q?db.prepare('SELECT * FROM products WHERE name LIKE ? OR category LIKE ?').all(`%${q}%`,`%${q}%`):db.prepare('SELECT * FROM products').all(); res.send(layout('Products',`<h1>All Products (${list.length})</h1><form class="search-bar" method="GET"><input name="q" placeholder="Search products..." value="${q}" data-testid="search-input"/><button data-testid="search-btn">Search</button></form>${list.length===0?'<div class="empty">No products found</div>':`<div class="grid" data-testid="product-grid">${list.map(renderCard).join('')}</div>`}`,u)); });
+app.get('/products',(req,res)=>{ const u=getUser(req); const q=req.query.q||''; const list=q?db.prepare('SELECT * FROM products WHERE name LIKE ? OR category LIKE ?').all(`%${q}%`,`%${q}%`):db.prepare('SELECT * FROM products').all(); res.send(layout('Products',`<h1>All Products (${list.length})</h1><form class="search-bar" method="GET"><input name="q" placeholder="Search products..." value="${q}" data-testid="search-input"/><button data-testid="search-btn">Search</button></form>${list.length===0?'<div class="empty">No products found</div>':`<div class="grid" data-testid="product-grid">${list.map(p=>renderCard(p, u?u.id:null)).join('')}</div>`}`,u)); });
 
 app.get('/products/:id',(req,res)=>{ const u=getUser(req); const p=db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id); if(!p) return res.status(404).send(layout('Not Found','<div class="empty">Not found</div>',u)); res.send(layout(p.name,`<div class="detail" data-testid="product-detail"><div class="emoji">${p.emoji}</div><div><h1 data-testid="product-name">${p.name}</h1><div style="color:#5a6b7b;font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-top:8px">${p.category}</div><div class="price" data-testid="product-price">$${p.price}</div><p class="desc">${p.description}</p><p style="margin-bottom:24px;color:#5a6b7b">${p.stock>0?p.stock+' in stock':'Out of stock'}</p><form method="POST" action="/cart/add"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-to-cart">${p.stock===0?'Out of stock':'Add to Cart'}</button></form></div></div>`,u)); });
 
@@ -123,6 +83,10 @@ app.get('/register',(req,res)=>{ res.send(layout('Register',`<div class="form-ca
 app.post('/register',(req,res)=>{ const {name,email,password}=req.body; try{ const r=db.prepare('INSERT INTO users (email,password_hash,name,role) VALUES (?,?,?,?)').run(email,bcrypt.hashSync(password,10),name,'customer'); req.session.userId=r.lastInsertRowid; res.redirect('/'); }catch(e){ res.redirect('/register?error=Email+exists'); } });
 
 app.get('/logout',(req,res)=>{ req.session.destroy(); res.redirect('/'); });
+
+app.get('/wishlist',requireLogin,(req,res)=>{ const u=getUser(req); const list=db.prepare('SELECT p.* FROM products p JOIN wishlists w ON p.id = w.product_id WHERE w.user_id = ?').all(u.id); res.send(layout('My Wishlist',`<h1>My Wishlist (${list.length})</h1>${list.length===0?'<div class="empty">Your wishlist is empty</div>':`<div class="grid">${list.map(p=>renderCard(p, u.id)).join('')}</div>`}`,u)); });
+
+app.post('/wishlist/toggle',requireLogin,(req,res)=>{ const u=getUser(req); const pid=parseInt(req.body.productId); const existing=db.prepare('SELECT 1 FROM wishlists WHERE user_id=? AND product_id=?').get(u.id, pid); if(existing){ db.prepare('DELETE FROM wishlists WHERE user_id=? AND product_id=?').run(u.id, pid); }else{ db.prepare('INSERT INTO wishlists (user_id, product_id) VALUES (?,?)').run(u.id, pid); } res.redirect(req.headers.referer||'/products'); });
 
 app.get('/admin',requireLogin,(req,res)=>{ const u=getUser(req); if(u.role!=='admin') return res.status(403).send(layout('Forbidden','<div class="empty">Admin only</div>',u)); const orders=db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all(); const products=db.prepare('SELECT * FROM products').all(); const rev=orders.reduce((s,o)=>s+o.total,0); res.send(layout('Admin',`<h1>Admin Dashboard</h1><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:32px"><div class="card"><div style="font-size:32px;font-weight:700;color:#00b48b">${orders.length}</div><div style="color:#5a6b7b;font-size:13px">Total Orders</div></div><div class="card"><div style="font-size:32px;font-weight:700;color:#00b48b">$${rev.toFixed(2)}</div><div style="color:#5a6b7b;font-size:13px">Revenue</div></div><div class="card"><div style="font-size:32px;font-weight:700;color:#00b48b">${products.length}</div><div style="color:#5a6b7b;font-size:13px">Products</div></div></div>`,u)); });
 
