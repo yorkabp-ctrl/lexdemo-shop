@@ -86,21 +86,33 @@ td{padding:12px 16px;border-bottom:1px solid #eef2f5;font-size:14px}
 <nav><div><a href="/" class="brand">🛒 LexDemo</a></div><div>
 <a href="/">Home</a><a href="/products">Products</a>
 ${user ? `<a href="/orders">My Orders</a>${user.role==='admin'?'<a href="/admin">Admin</a>':''}<a href="/logout">Logout (${user.name})</a>` : `<a href="/login">Login</a><a href="/register">Register</a>`}
-<a href="/cart">Cart</a>
+<a href="/cart">Cart</a><a href="/wishlist" data-testid="nav-wishlist">❤️ Wishlist <span class="cart-badge" data-testid="wishlist-count">${(req.session.wishlist||[]).length}</span></a>
 </div></nav><div class="container">${body}</div></body></html>`;
 }
 
-function renderCard(p){
-  return `<div class="card" data-testid="product-${p.id}"><div class="emoji">${p.emoji}</div><div class="name">${p.name}</div><div class="desc">${p.description}</div><div class="price">$${p.price}</div><div class="stock">${p.stock>0?p.stock+' in stock':'Out of stock'}</div><form method="POST" action="/cart/add" style="margin-top:12px"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-${p.id}">${p.stock===0?'Out of stock':'Add to Cart'}</button></form><a href="/products/${p.id}" style="font-size:13px;color:#00b48b;margin-top:8px;text-decoration:none">View details →</a></div>`;
+function renderCard(p, isWishlisted=false){
+  return `<div class="card" data-testid="product-${p.id}"><div class="emoji">${p.emoji}</div><div class="name">${p.name}</div><div class="desc">${p.description}</div><div class="price">${p.price}</div><div class="stock">${p.stock>0?p.stock+' in stock':'Out of stock'}</div><div style="display:flex;gap:8px;margin-top:12px"><form method="POST" action="/cart/add" style="flex:1"><input type="hidden" name="productId" value="${p.id}"/><button style="width:100%" ${p.stock===0?'disabled':''} data-testid="add-${p.id}">${p.stock===0?'Out of stock':'Add to Cart'}</button></form><form method="POST" action="/wishlist/toggle"><input type="hidden" name="productId" value="${p.id}"/><button type="submit" class="${isWishlisted?'danger':''}" data-testid="wishlist-${p.id}" style="padding:10px 14px">❤️</button></form></div><a href="/products/${p.id}" style="font-size:13px;color:#00b48b;margin-top:8px;text-decoration:none">View details →</a></div>`;
 }
 
-app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(renderCard).join('')}</div>`,u)); });
+app.get('/', (req,res)=>{ const u=getUser(req); const w=req.session.wishlist||[]; res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(p=>renderCard(p, w.includes(p.id))).join('')}</div>`,u)); });
 
 app.get('/products',(req,res)=>{ const u=getUser(req); const q=req.query.q||''; const list=q?db.prepare('SELECT * FROM products WHERE name LIKE ? OR category LIKE ?').all(`%${q}%`,`%${q}%`):db.prepare('SELECT * FROM products').all(); res.send(layout('Products',`<h1>All Products (${list.length})</h1><form class="search-bar" method="GET"><input name="q" placeholder="Search products..." value="${q}" data-testid="search-input"/><button data-testid="search-btn">Search</button></form>${list.length===0?'<div class="empty">No products found</div>':`<div class="grid" data-testid="product-grid">${list.map(renderCard).join('')}</div>`}`,u)); });
 
 app.get('/products/:id',(req,res)=>{ const u=getUser(req); const p=db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id); if(!p) return res.status(404).send(layout('Not Found','<div class="empty">Not found</div>',u)); res.send(layout(p.name,`<div class="detail" data-testid="product-detail"><div class="emoji">${p.emoji}</div><div><h1 data-testid="product-name">${p.name}</h1><div style="color:#5a6b7b;font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-top:8px">${p.category}</div><div class="price" data-testid="product-price">$${p.price}</div><p class="desc">${p.description}</p><p style="margin-bottom:24px;color:#5a6b7b">${p.stock>0?p.stock+' in stock':'Out of stock'}</p><form method="POST" action="/cart/add"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-to-cart">${p.stock===0?'Out of stock':'Add to Cart'}</button></form></div></div>`,u)); });
 
 app.post('/cart/add',(req,res)=>{ const pid=parseInt(req.body.productId); const p=db.prepare('SELECT * FROM products WHERE id=?').get(pid); if(!p||p.stock===0) return res.redirect('/products'); req.session.cart=req.session.cart||[]; const ex=req.session.cart.find(i=>i.productId===pid); if(ex) ex.quantity+=1; else req.session.cart.push({productId:pid,quantity:1}); res.redirect('/cart'); });
+app.post('/wishlist/toggle',(req,res)=>{ const pid=parseInt(req.body.productId);
+  req.session.wishlist=req.session.wishlist||[];
+  const idx=req.session.wishlist.indexOf(pid);
+  if(idx>-1) req.session.wishlist.splice(idx,1);
+  else req.session.wishlist.push(pid);
+  res.redirect(req.get('referer')||'/products');
+});
+app.get('/wishlist',(req,res)=>{ const u=getUser(req);
+  const w=req.session.wishlist||[];
+  const list=w.map(id=>db.prepare('SELECT * FROM products WHERE id=?').get(id)).filter(Boolean);
+  res.send(layout('Wishlist',`<h1>My Wishlist (${list.length})</h1>${list.length===0?'<div class="empty"><p>Your wishlist is empty</p><a href="/products" class="btn" style="margin-top:16px">Browse products</a></div>':`<div class="grid" data-testid="wishlist-grid">${list.map(p=>renderCard(p, true)).join('')}</div>`}`,u));
+});
 
 app.get('/cart',(req,res)=>{ const u=getUser(req); const cart=req.session.cart||[]; const items=cart.map(i=>{ const p=db.prepare('SELECT * FROM products WHERE id=?').get(i.productId); return {...i,product:p,subtotal:p.price*i.quantity}; }); const total=items.reduce((s,i)=>s+i.subtotal,0); res.send(layout('Cart',`<h1>Your Cart</h1>${items.length===0?'<div class="empty"><p>Your cart is empty</p><a href="/products" class="btn" style="margin-top:16px">Browse products</a></div>':`<table data-testid="cart-table"><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td>${i.product.emoji} ${i.product.name}</td><td>$${i.product.price}</td><td>${i.quantity}</td><td>$${i.subtotal.toFixed(2)}</td><td><form method="POST" action="/cart/remove" style="display:inline"><input type="hidden" name="productId" value="${i.product.id}"/><button class="danger" style="padding:6px 12px;font-size:12px">Remove</button></form></td></tr>`).join('')}</tbody></table><div style="text-align:right;margin-top:24px;font-size:20px"><strong>Total: $<span data-testid="cart-total">${total.toFixed(2)}</span></strong></div><div style="text-align:right;margin-top:16px"><a href="/checkout" class="btn" data-testid="checkout-btn">Proceed to Checkout</a></div>`}`,u)); });
 
@@ -126,7 +138,7 @@ app.get('/logout',(req,res)=>{ req.session.destroy(); res.redirect('/'); });
 
 app.get('/admin',requireLogin,(req,res)=>{ const u=getUser(req); if(u.role!=='admin') return res.status(403).send(layout('Forbidden','<div class="empty">Admin only</div>',u)); const orders=db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all(); const products=db.prepare('SELECT * FROM products').all(); const rev=orders.reduce((s,o)=>s+o.total,0); res.send(layout('Admin',`<h1>Admin Dashboard</h1><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:32px"><div class="card"><div style="font-size:32px;font-weight:700;color:#00b48b">${orders.length}</div><div style="color:#5a6b7b;font-size:13px">Total Orders</div></div><div class="card"><div style="font-size:32px;font-weight:700;color:#00b48b">$${rev.toFixed(2)}</div><div style="color:#5a6b7b;font-size:13px">Revenue</div></div><div class="card"><div style="font-size:32px;font-weight:700;color:#00b48b">${products.length}</div><div style="color:#5a6b7b;font-size:13px">Products</div></div></div>`,u)); });
 
-app.post('/api/_test/reset',(req,res)=>{ req.session.cart=[]; db.prepare('DELETE FROM order_items').run(); db.prepare('DELETE FROM orders').run(); const stocks={1:5,2:3,3:0,4:12,5:8,6:4,7:6,8:2}; for(const [id,st] of Object.entries(stocks)) db.prepare('UPDATE products SET stock=? WHERE id=?').run(st,id); res.json({ok:true}); });
+app.post('/api/_test/reset',(req,res)=>{ req.session.cart=[]; req.session.wishlist=[]; db.prepare('DELETE FROM order_items').run(); db.prepare('DELETE FROM orders').run(); const stocks={1:5,2:3,3:0,4:12,5:8,6:4,7:6,8:2}; for(const [id,st] of Object.entries(stocks)) db.prepare('UPDATE products SET stock=? WHERE id=?').run(st,id); res.json({ok:true}); });
 app.post('/api/_test/break',(req,res)=>{ db.prepare('UPDATE products SET stock=0').run(); res.json({ok:true}); });
 app.post('/api/_test/fix',(req,res)=>{ const s={1:5,2:3,3:0,4:12,5:8,6:4,7:6,8:2}; for(const [id,st] of Object.entries(s)) db.prepare('UPDATE products SET stock=? WHERE id=?').run(st,id); res.json({ok:true}); });
 app.get('/health',(req,res)=>res.json({status:'ok'}));
