@@ -38,12 +38,18 @@ function getUser(req) {
 }
 function requireLogin(req,res,next){ if(!req.session.userId) return res.redirect('/login'); next(); }
 
+function linearWidget() {
+  return `<div style="background:white;border-radius:12px;padding:24px;margin-bottom:32px;box-shadow:0 2px 8px rgba(0,0,0,.06);display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center" data-testid="linear-widget"><div><div style="font-size:12px;font-weight:700;color:#5e6ad2;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Ticket DEV-1</div><h2 style="font-size:20px;margin:0 0 8px;color:#0f2027">Get familiar with Linear</h2><p style="color:#5a6b7b;font-size:14px;line-height:1.5">Welcome to Linear! Watch an introductory video and access setup guides and resources.</p></div><div style="display:flex;gap:12px"><a href="https://linear.app/docs/how-to-use-linear-small-teams" target="_blank" class="btn" style="background:#5e6ad2;text-decoration:none" data-testid="linear-setup-btn">Setup Guides</a><a href="https://linear.app/join-slack" target="_blank" class="btn" style="background:#24292e;text-decoration:none" data-testid="linear-slack-btn">Join Slack</a></div></div>`;
+}
+
 function layout(title, body, user) {
   return `<!DOCTYPE html><html><head><title>${title} — LexDemo</title><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f7fa;color:#1a2332;min-height:100vh}
 nav{background:#0f2027;color:white;padding:16px 32px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.1);position:sticky;top:0;z-index:100}
 nav a{color:white;text-decoration:none;margin-left:20px;font-size:14px}
+nav .linear-link{background:#5e6ad2;padding:6px 12px;border-radius:6px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+nav .linear-link:hover{background:#4f5bd1}
 nav a:hover{color:#00b48b}
 nav .brand{font-size:20px;font-weight:700;color:#00b48b}
 nav .cart-badge{background:#00b48b;padding:2px 8px;border-radius:12px;font-size:12px;margin-left:4px}
@@ -83,9 +89,9 @@ td{padding:12px 16px;border-bottom:1px solid #eef2f5;font-size:14px}
 .detail h1{font-size:32px}.detail .price{font-size:36px;color:#00b48b;font-weight:700;margin:16px 0}
 .detail .desc{color:#5a6b7b;line-height:1.6;margin-bottom:24px}
 </style></head><body>
-<nav><div><a href="/" class="brand">🛒 LexDemo</a></div><div>
+<nav><div><a href="/" class="brand">🛒 LexDemo</a></div><div style="display:flex;align-items:center">
 <a href="/">Home</a><a href="/products">Products</a>
-${user ? `<a href="/orders">My Orders</a>${user.role==='admin'?'<a href="/admin">Admin</a>':''}<a href="/logout">Logout (${user.name})</a>` : `<a href="/login">Login</a><a href="/register">Register</a>`}
+${user ? `<a href="/orders" data-testid="nav-orders">My Orders</a>${user.role==='admin'?'<a href="/admin" data-testid="nav-admin">Admin</a>':''}<a href="/logout" data-testid="nav-logout">Logout (${user.name})</a>` : `<a href="/login" data-testid="nav-login">Login</a><a href="/register" data-testid="nav-register">Register</a>`} <a href="https://linear.app" target="_blank" class="linear-link" data-testid="nav-linear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>Linear</a>
 <a href="/cart">Cart</a>
 </div></nav><div class="container">${body}</div></body></html>`;
 }
@@ -94,7 +100,7 @@ function renderCard(p){
   return `<div class="card" data-testid="product-${p.id}"><div class="emoji">${p.emoji}</div><div class="name">${p.name}</div><div class="desc">${p.description}</div><div class="price">$${p.price}</div><div class="stock">${p.stock>0?p.stock+' in stock':'Out of stock'}</div><form method="POST" action="/cart/add" style="margin-top:12px"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-${p.id}">${p.stock===0?'Out of stock':'Add to Cart'}</button></form><a href="/products/${p.id}" style="font-size:13px;color:#00b48b;margin-top:8px;text-decoration:none">View details →</a></div>`;
 }
 
-app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(renderCard).join('')}</div>`,u)); });
+app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div>${linearWidget()}<h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(renderCard).join('')}</div>`,u)); });
 
 app.get('/products',(req,res)=>{ const u=getUser(req); const q=req.query.q||''; const list=q?db.prepare('SELECT * FROM products WHERE name LIKE ? OR category LIKE ?').all(`%${q}%`,`%${q}%`):db.prepare('SELECT * FROM products').all(); res.send(layout('Products',`<h1>All Products (${list.length})</h1><form class="search-bar" method="GET"><input name="q" placeholder="Search products..." value="${q}" data-testid="search-input"/><button data-testid="search-btn">Search</button></form>${list.length===0?'<div class="empty">No products found</div>':`<div class="grid" data-testid="product-grid">${list.map(renderCard).join('')}</div>`}`,u)); });
 
