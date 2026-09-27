@@ -77,6 +77,8 @@ td{padding:12px 16px;border-bottom:1px solid #eef2f5;font-size:14px}
 .success{background:#d4f4ea;color:#00856a;padding:12px;border-radius:8px;margin-bottom:16px;font-size:14px}
 .empty{text-align:center;padding:60px 20px;color:#8899a6}
 .hero{background:linear-gradient(135deg,#00b48b,#007a5e);color:white;padding:60px 32px;border-radius:16px;margin-bottom:32px;text-align:center}
+.free-shipping-banner{background:#00856a;color:#d4f4ea;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;display:inline-block;margin-top:16px}
+.hero-badge{display:inline-block;background:#d4f4ea;color:#00856a;padding:4px 12px;border-radius:12px;font-size:13px;font-weight:600;margin-top:16px}
 .hero h1{color:white;font-size:36px;margin-bottom:12px}.hero p{font-size:16px;opacity:.9}
 .detail{display:grid;grid-template-columns:1fr 1fr;gap:40px;background:white;padding:32px;border-radius:12px}
 .detail .emoji{font-size:200px;text-align:center}
@@ -94,7 +96,7 @@ function renderCard(p){
   return `<div class="card" data-testid="product-${p.id}"><div class="emoji">${p.emoji}</div><div class="name">${p.name}</div><div class="desc">${p.description}</div><div class="price">$${p.price}</div><div class="stock">${p.stock>0?p.stock+' in stock':'Out of stock'}</div><form method="POST" action="/cart/add" style="margin-top:12px"><input type="hidden" name="productId" value="${p.id}"/><button ${p.stock===0?'disabled':''} data-testid="add-${p.id}">${p.stock===0?'Out of stock':'Add to Cart'}</button></form><a href="/products/${p.id}" style="font-size:13px;color:#00b48b;margin-top:8px;text-decoration:none">View details →</a></div>`;
 }
 
-app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(renderCard).join('')}</div>`,u)); });
+app.get('/', (req,res)=>{ const u=getUser(req); res.send(layout('Home',`<div class="hero"><h1>Welcome to LexDemo Shop</h1><p>Premium tech gear for modern professionals</p><div class="free-shipping-banner" data-testid="free-shipping-banner">Free shipping on orders over $50</div><div class="hero-badge" data-testid="shipping-badge">Free shipping on orders over $50</div></div><h2>Featured Products</h2><div class="grid">${db.prepare('SELECT * FROM products LIMIT 4').all().map(renderCard).join('')}</div>`,u)); });
 
 app.get('/products',(req,res)=>{ const u=getUser(req); const q=req.query.q||''; const list=q?db.prepare('SELECT * FROM products WHERE name LIKE ? OR category LIKE ?').all(`%${q}%`,`%${q}%`):db.prepare('SELECT * FROM products').all(); res.send(layout('Products',`<h1>All Products (${list.length})</h1><form class="search-bar" method="GET"><input name="q" placeholder="Search products..." value="${q}" data-testid="search-input"/><button data-testid="search-btn">Search</button></form>${list.length===0?'<div class="empty">No products found</div>':`<div class="grid" data-testid="product-grid">${list.map(renderCard).join('')}</div>`}`,u)); });
 
