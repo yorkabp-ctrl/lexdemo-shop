@@ -1,36 +1,35 @@
 # ─── Stage 1: Builder ───
-FROM node:20.19.5-bookworm AS builder
+FROM node:20.19.5-trixie AS builder
 
 WORKDIR /app
 
-# Install build tools for native compilation
+# Build tools for native compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
  && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 
-# Install ALL dependencies (including dev, since node-gyp is a dev dep)
-RUN npm install
+# 1. Install WITHOUT running lifecycle scripts — this prevents the broken prebuilt binary
+#    from ever being downloaded or run
+RUN npm install --ignore-scripts
 
-# Remove prebuilt binary (if any) and compile from source
-# --build-from-source forces node-gyp to compile for this container's ABI
-RUN npm rebuild better-sqlite3 --build-from-source
+# 2. Explicitly compile better-sqlite3 for THIS container's arch (arm64) and GLIBC (2.41)
+RUN cd node_modules/better-sqlite3 && npx node-gyp rebuild
 
-# VERIFY the .node file exists — fail build if missing
+# 3. Verify the .node file exists — fail the build if missing
 RUN test -f node_modules/better-sqlite3/build/Release/better_sqlite3.node \
     && echo "✓ better_sqlite3.node exists" \
     || (echo "✗ BINDING MISSING" && exit 1)
 
-# Verify the module actually loads (not just that the file exists)
+# 4. Verify it loads — fail the build if it segfaults
 RUN node -e "const db = require('better-sqlite3')(':memory:'); db.close(); console.log('✓ better-sqlite3 loads on ' + process.arch)"
 
 # ─── Stage 2: Runtime ───
-FROM node:20.19.5-bookworm
+FROM node:20.19.5-trixie
 
 WORKDIR /app
 
-# Copy the fully built node_modules from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
 COPY app.js .
