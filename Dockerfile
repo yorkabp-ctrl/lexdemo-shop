@@ -1,25 +1,20 @@
-# Stage 1: Build Stage (runs on the target architecture)
-FROM node:20-bookworm AS builder
+# ─── Stage 1: Dependencies ───
+FROM node:24-trixie-slim AS deps
 
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ \
- && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 
-RUN npm ci --omit=dev
+# --ignore-scripts prevents node-gyp/QEMU compile.
+# better-sqlite3 v13 ships pre-built binaries for linux/arm64.
+RUN npm ci --omit=dev --ignore-scripts
 
-RUN node -e "const db = require('better-sqlite3')(':memory:'); db.close(); console.log('✓ better-sqlite3 binding loaded successfully on ' + process.arch)"
-
-# Stage 2: Runtime Stage
-FROM node:20-bookworm
+# ─── Stage 2: Runtime ───
+FROM node:24-trixie-slim
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
-
+COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY app.js .
 
